@@ -1,0 +1,89 @@
+{% extends 'rmm/base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3>💻 Remote Terminal: {{ agent_id }}</h3>
+        <a href="/rmm/monitoring/?agent_id={{ agent.id }}" class="btn btn-secondary">Back to Monitor</a>
+    </div>
+
+    <div class="card bg-black border-secondary" style="height: 70vh;">
+        <div class="card-header bg-dark text-success font-monospace border-secondary">
+            root@{{ agent_id }}:~#
+        </div>
+        
+        <div id="terminal-output" class="card-body overflow-auto font-monospace text-success p-3" style="white-space: pre-wrap;">
+            <div class="text-muted">Connecting to agent...</div>
+        </div>
+        
+        <div class="card-footer bg-dark border-secondary">
+            <div class="input-group">
+                <span class="input-group-text bg-black text-success border-secondary">$</span>
+                <input type="text" id="cmd-input" class="form-control bg-black text-white border-secondary font-monospace" placeholder="Type command (e.g., ipconfig, dir)..." autofocus>
+                <button class="btn btn-success" onclick="sendCommand()">Run</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const agentId = "{{ agent_id }}";
+    const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+    const wsUrl = protocol + window.location.host + "/ws/remote/" + agentId + "/";
+    
+    let socket;
+
+    function connect() {
+        socket = new WebSocket(wsUrl);
+
+        socket.onopen = () => {
+            log(">> Connection Established. Ready for commands.");
+        };
+
+        socket.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'shell_output') {
+                    log(data.output);
+                }
+            } catch (e) {}
+        };
+
+        socket.onclose = () => {
+            log(">> Connection Lost. Reconnecting...");
+            setTimeout(connect, 3000);
+        };
+    }
+
+    function log(text) {
+        const output = document.getElementById('terminal-output');
+        output.innerText += text + "\n";
+        output.scrollTop = output.scrollHeight; // Auto-scroll to bottom
+    }
+
+    function sendCommand() {
+        const input = document.getElementById('cmd-input');
+        const cmd = input.value;
+        if (!cmd) return;
+
+        // Display locally
+        log("root@remote:~$ " + cmd);
+
+        // Send to Server -> Agent
+        if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({
+                'type': 'shell_command',
+                'command': cmd
+            }));
+        }
+        input.value = ""; // Clear input
+    }
+
+    // Allow "Enter" key to send
+    document.getElementById('cmd-input').addEventListener("keypress", function(event) {
+        if (event.key === "Enter") sendCommand();
+    });
+
+    connect();
+</script>
+{% endblock %}

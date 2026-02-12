@@ -3,11 +3,9 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 
 class RemoteDesktopConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        # The URL will be /ws/remote/AGENT_ID/
         self.agent_id = self.scope['url_route']['kwargs']['agent_id']
         self.room_group_name = f"remote_{self.agent_id}"
 
-        # Join the "Room" for this specific computer
         await self.channel_layer.group_add(
             self.room_group_name,
             self.channel_name
@@ -15,7 +13,6 @@ class RemoteDesktopConsumer(AsyncWebsocketConsumer):
         await self.accept()
 
     async def disconnect(self, close_code):
-        # Leave the room
         await self.channel_layer.group_discard(
             self.room_group_name,
             self.channel_name
@@ -23,7 +20,7 @@ class RemoteDesktopConsumer(AsyncWebsocketConsumer):
 
     # Receive message from WebSocket (Browser or Agent)
     async def receive(self, text_data=None, bytes_data=None):
-        # If we receive bytes (Image data from Agent), send to Browser
+        # 1. Handle Binary Data (Video Frames from Agent)
         if bytes_data:
             await self.channel_layer.group_send(
                 self.room_group_name,
@@ -34,25 +31,46 @@ class RemoteDesktopConsumer(AsyncWebsocketConsumer):
                 }
             )
         
-        # If we receive text (Mouse/Keyboard from Browser), send to Agent
+        # 2. Handle Text Data (Commands or Mouse/Keyboard)
         if text_data:
-            await self.channel_layer.group_send(
-                self.room_group_name,
-                {
-                    'type': 'control_command',
-                    'text': text_data,
-                    'sender_channel_name': self.channel_name
-                }
-            )
+            try:
+                data = json.loads(text_data)
+                msg_type = data.get('type', '')
 
-    # Handler: Send Video Frame to Browser
+                # If it's a shell command/output, use a specific handler
+                if msg_type in ['shell_command', 'shell_output']:
+                    await self.channel_layer.group_send(
+                        self.room_group_name,
+                        {
+                            'type': 'forward_shell',
+                            'message': data,
+                            'sender_channel_name': self.channel_name
+                        }
+                    )
+                else:
+                    # Default to control command (Mouse/Keyboard)
+                    await self.channel_layer.group_send(
+                        self.room_group_name,
+                        {
+                            'type': 'control_command',
+                            'text': text_data,
+                            'sender_channel_name': self.channel_name
+                        }
+                    )
+            except:
+                pass
+
+    # --- HANDLERS ---
+
     async def video_frame(self, event):
-        # Don't send the frame back to the sender (the Agent)
         if self.channel_name != event['sender_channel_name']:
             await self.send(bytes_data=event['bytes'])
 
-    # Handler: Send Control Command to Agent
     async def control_command(self, event):
-        # Don't send the command back to the sender (the Browser)
         if self.channel_name != event['sender_channel_name']:
             await self.send(text_data=event['text'])
+
+    # New Handler for Shell
+    async def forward_shell(self, event):
+        if self.channel_name != event['sender_channel_name']:
+            await self.send(text_data=json.dumps(event['message']))

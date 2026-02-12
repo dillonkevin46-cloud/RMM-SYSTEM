@@ -1,0 +1,91 @@
+{% extends 'rmm/base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-4">
+            <a href="{% url 'ticket_list' %}" class="btn btn-outline-secondary mb-3">← Back to Dashboard</a>
+            
+            <div class="card bg-dark border-secondary">
+                <div class="card-header border-secondary">
+                    <h5 class="card-title mb-0">Ticket #{{ ticket.id }}</h5>
+                </div>
+                <div class="card-body">
+                    <h6 class="text-muted">Status</h6>
+                    <p>
+                        <span class="badge {% if ticket.status == 'Open' %}bg-danger{% elif ticket.status == 'Closed' %}bg-secondary{% else %}bg-warning{% endif %} fs-6">
+                            {{ ticket.status }}
+                        </span>
+                    </p>
+
+                    <h6 class="text-muted">Priority</h6>
+                    <p class="{{ ticket.priority }} fw-bold">{{ ticket.priority }}</p>
+
+                    <h6 class="text-muted">Device</h6>
+                    <p>
+                        {% if ticket.agent %}
+                            <a href="/rmm/monitoring/?agent_id={{ ticket.agent.id }}" class="text-info">
+                                🖥️ {{ ticket.agent.hostname }}
+                            </a>
+                        {% else %}
+                            <span class="text-muted">No device linked</span>
+                        {% endif %}
+                    </p>
+
+                    <h6 class="text-muted">Created By</h6>
+                    <p>{{ ticket.created_by }} on {{ ticket.created_at|date:"M d, Y H:i" }}</p>
+                    
+                    <hr class="border-secondary">
+                    
+                    <form method="POST">
+                        {% csrf_token %}
+                        {% if ticket.status != 'Closed' %}
+                            <button name="status_update" value="Closed" class="btn btn-danger w-100">Close Ticket</button>
+                        {% else %}
+                            <button name="status_update" value="In Progress" class="btn btn-success w-100">Re-Open Ticket</button>
+                        {% endif %}
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card bg-dark border-secondary">
+                <div class="card-header border-secondary">
+                    <h4 class="mb-0">{{ ticket.title }}</h4>
+                </div>
+                <div class="card-body" style="height: 60vh; overflow-y: auto;">
+                    <div class="alert alert-secondary">
+                        <strong>Original Request:</strong><br>
+                        {{ ticket.description|linebreaks }}
+                    </div>
+
+                    {% for comment in ticket.comments.all %}
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between">
+                                <strong>{{ comment.author.username }}</strong>
+                                <small class="text-muted">{{ comment.created_at|date:"M d, H:i" }}</small>
+                            </div>
+                            <div class="p-3 rounded bg-secondary text-white mt-1">
+                                {{ comment.text|linebreaks }}
+                            </div>
+                        </div>
+                    {% empty %}
+                        <p class="text-muted text-center">No comments yet.</p>
+                    {% endfor %}
+                </div>
+                
+                <div class="card-footer border-secondary">
+                    <form method="POST">
+                        {% csrf_token %}
+                        <div class="input-group">
+                            <input type="text" name="new_comment" class="form-control bg-dark text-white border-secondary" placeholder="Type a reply..." required>
+                            <button class="btn btn-primary">Send</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

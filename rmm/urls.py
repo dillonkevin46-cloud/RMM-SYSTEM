@@ -7,4 +7,5 @@ urlpatterns = [
     path('api/checkin/', views.check_in, name='agent_checkin'),
     path('remote/<str:agent_id>/', views.remote_view, name='remote_view'),
     path('monitoring/', views.monitoring_dashboard, name='monitoring'),
+    path('terminal/<str:agent_id>/', views.terminal_view, name='terminal_view'),
 ]

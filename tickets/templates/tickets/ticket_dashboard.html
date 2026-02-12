@@ -50,7 +50,9 @@
                             <td>{{ ticket.agent.hostname|default:"-" }}</td>
                             <td>{{ ticket.created_at|date:"M d" }}</td>
                             <td>{{ ticket.assigned_to.username|default:"Unassigned" }}</td>
-                            <td><button class="btn btn-sm btn-info">View</button></td>
+                            <td>
+                               <a href="{% url 'ticket_detail' ticket.id %}" class="btn btn-sm btn-info">View</a>
+                            </td>
                         </tr>
                         {% empty %}
                         <tr><td colspan="8">No tickets found.</td></tr>

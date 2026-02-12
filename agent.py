@@ -17,6 +17,7 @@ from tkinter import simpledialog
 from PIL import Image, ImageDraw
 import pystray
 from pystray import MenuItem as item
+import os  # <--- Added import
 
 # --- CONFIGURATION ---
 SERVER_URL = "http://127.0.0.1:8000"
@@ -25,32 +26,36 @@ API_CHECKIN = f"{SERVER_URL}/rmm/api/checkin/"
 API_TICKET = f"{SERVER_URL}/tickets/api/create/"
 AGENT_ID = str(uuid.getnode())
 
-# --- HELPER: Measure Ping ---
 def measure_latency(target="8.8.8.8"):
-    """Pings a server to measure latency in ms."""
     try:
-        # Windows ping command: -n 1 (count), -w 1000 (timeout)
-        output = subprocess.check_output(f"ping -n 1 -w 1000 {target}", shell=True).decode()
+        cmd = "ping -n 1 -w 1000" if platform.system() == "Windows" else "ping -c 1 -W 1"
+        output = subprocess.check_output(f"{cmd} {target}", shell=True).decode()
         if "time=" in output:
-            return int(output.split("time=")[1].split("ms")[0])
+            return int(output.split("time=")[1].split("ms")[0].strip())
+        elif "time=" not in output and "ms" in output:
+             return int(float(output.split("time=")[1].split(" ")[0]))
     except:
         pass
     return 0
 
-# --- HELPER: Gather System Info ---
 def get_system_info():
     """Collects all hardware specs + performance stats."""
     try:
-        # Static Info
         mac_num = uuid.getnode()
         mac = ':'.join(('%012X' % mac_num)[i:i+2] for i in range(0, 12, 2))
         ram_gb = f"{round(psutil.virtual_memory().total / (1024.0 **3))} GB"
         hostname = socket.gethostname()
         private_ip = socket.gethostbyname(hostname)
 
-        # Dynamic Stats (For Graphs)
-        cpu_percent = psutil.cpu_percent(interval=1)
+        # Dynamic Stats
+        cpu_percent = psutil.cpu_percent(interval=None)
         ram_percent = psutil.virtual_memory().percent
+        
+        # --- NEW: Disk Usage ---
+        # Get usage of the main drive (C:\ on Windows, / on Linux)
+        disk_path = 'C:\\' if platform.system() == 'Windows' else '/'
+        disk_percent = psutil.disk_usage(disk_path).percent
+
         latency = measure_latency()
 
         return {
@@ -59,9 +64,10 @@ def get_system_info():
             "operating_system": f"{platform.system()} {platform.release()}",
             "cpu_model": platform.processor(),
             "ram_total": ram_gb,
-            "ram_percent": ram_percent,   # Graph Data
-            "cpu_percent": cpu_percent,   # Graph Data
-            "latency_ms": latency,        # Graph Data
+            "ram_percent": ram_percent,
+            "cpu_percent": cpu_percent,
+            "disk_percent": disk_percent, # <--- Sending this to server
+            "latency_ms": latency,
             "public_ip": "Checking...",
             "private_ip": private_ip,
             "mac_address": mac,
@@ -73,11 +79,12 @@ def get_system_info():
 
 # --- GUI TOOLS ---
 def native_alert(title, message, style=0):
-    """Styles: 0=OK, 48=Warning, 64=Info. Block: 0x1000 = System Modal"""
-    ctypes.windll.user32.MessageBoxW(0, message, title, style | 0x1000)
+    try:
+        ctypes.windll.user32.MessageBoxW(0, message, title, style | 0x1000)
+    except:
+        print(f"[{title}] {message}")
 
 def gui_network_test(icon, item):
-    """Checks internet connection without freezing the app."""
     def _run_test():
         try:
             requests.get(SERVER_URL, timeout=3)
@@ -87,14 +94,11 @@ def gui_network_test(icon, item):
     threading.Thread(target=_run_test).start()
 
 def gui_report_issue(icon, item):
-    """Opens ticket popup without freezing the app."""
     def _open_input():
         root = tk.Tk()
         root.withdraw()
         root.attributes("-topmost", True)
-        
         issue_text = simpledialog.askstring("IT Support", "Describe your issue:", parent=root)
-        
         if issue_text:
             data = {
                 "agent_id": AGENT_ID,
@@ -123,64 +127,72 @@ def create_image():
 
 # --- BACKGROUND TASKS ---
 def start_websocket():
-    """Runs Remote Desktop Streaming."""
+    def on_message(ws, message):
+        try:
+            data = json.loads(message)
+            if data.get('type') == 'shell_command':
+                cmd = data.get('command')
+                print(f">> Executing: {cmd}")
+                try:
+                    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+                    output = result.stdout + result.stderr
+                    if not output: output = "(Command ran with no output)"
+                except Exception as e:
+                    output = f"Error executing command: {e}"
+
+                response = {"type": "shell_output", "output": output}
+                ws.send(json.dumps(response))
+        except Exception as e:
+            print(f"WebSocket Message Error: {e}")
+
     def on_open(ws):
-        print(">> WebSocket: Connected to Screen Stream")
+        print(">> WebSocket: Connected (Screen + Terminal)")
         def stream():
             with mss.mss() as sct:
                 monitor = sct.monitors[1]
                 while ws.sock and ws.sock.connected:
-                    sct_img = sct.grab(monitor)
-                    img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-                    img = img.resize((1280, 720), Image.Resampling.LANCZOS)
-                    buffer = io.BytesIO()
-                    img.save(buffer, format="JPEG", quality=50)
                     try:
+                        sct_img = sct.grab(monitor)
+                        img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+                        img = img.resize((1280, 720), Image.Resampling.LANCZOS)
+                        buffer = io.BytesIO()
+                        img.save(buffer, format="JPEG", quality=50)
                         ws.send(buffer.getvalue(), opcode=websocket.ABNF.OPCODE_BINARY)
                     except:
                         break
-                    time.sleep(0.05)
+                    time.sleep(0.1)
         threading.Thread(target=stream, daemon=True).start()
 
     while True:
         try:
-            ws = websocket.WebSocketApp(f"{WS_URL}{AGENT_ID}/", on_open=on_open)
+            ws = websocket.WebSocketApp(f"{WS_URL}{AGENT_ID}/", on_open=on_open, on_message=on_message)
             ws.run_forever()
         except:
             pass
         time.sleep(5)
 
 def start_heartbeat():
-    """Runs 10s check-in loop."""
     print(f">> Heartbeat: Started for Agent {AGENT_ID}")
     while True:
         try:
             info = get_system_info()
-            r = requests.post(API_CHECKIN, json=info)
-            if r.status_code != 200:
-                print(f"!! Heartbeat Error: Server said {r.status_code}")
+            requests.post(API_CHECKIN, json=info)
         except Exception as e:
             print(f"!! Heartbeat Failed: {e}")
         time.sleep(10)
 
-# --- MAIN ENTRY POINT ---
 if __name__ == "__main__":
     print("--------------------------------")
     print(" RMM AGENT STARTING...          ")
     print("--------------------------------")
-
-    # Start Background Threads
     threading.Thread(target=start_websocket, daemon=True).start()
     threading.Thread(target=start_heartbeat, daemon=True).start()
     
     print(">> GUI: System Tray Icon Loaded")
-    
-    # Start Icon
     menu = pystray.Menu(
         item('Report Issue', gui_report_issue),
         item('Test Network', gui_network_test),
         item('Exit', exit_action)
     )
-    
     icon = pystray.Icon("RMM Agent", create_image(), "IT Support Agent", menu)
     icon.run()

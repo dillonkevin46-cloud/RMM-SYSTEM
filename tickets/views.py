@@ -2,7 +2,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
-from .models import Ticket, TicketCategory
+from .models import Ticket, TicketCategory, TicketComment # Added TicketComment
 from rmm.models import Agent
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -68,3 +68,31 @@ def api_create_ticket(request):
         except Exception as e:
             return JsonResponse({"status": "error", "message": str(e)}, status=500)
     return JsonResponse({"status": "error"}, status=400)
+
+@login_required
+def ticket_detail(request, ticket_id):
+    ticket = get_object_or_404(Ticket, id=ticket_id)
+    
+    if request.method == "POST":
+        # Handle Status Change (e.g. Closing the ticket)
+        if 'status_update' in request.POST:
+            new_status = request.POST.get('status_update')
+            ticket.status = new_status
+            if new_status == 'Closed':
+                ticket.closed_at = timezone.now()
+            ticket.save()
+            return redirect('ticket_detail', ticket_id=ticket.id)
+            
+        # Handle New Comment
+        if 'new_comment' in request.POST:
+            text = request.POST.get('new_comment')
+            if text:
+                TicketComment.objects.create(
+                    ticket=ticket,
+                    author=request.user,
+                    text=text,
+                    is_private=False # You could add a checkbox for this later
+                )
+            return redirect('ticket_detail', ticket_id=ticket.id)
+
+    return render(request, 'tickets/ticket_detail.html', {'ticket': ticket})
