@@ -1,0 +1,65 @@
+{% extends 'rmm/base.html' %}
+
+{% block content %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Helpdesk</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>body { background-color: #121212; color: #e0e0e0; }</style>
+</head>
+<body class="p-4">
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between mb-4">
+            <h2>🎫 Helpdesk Ticketing</h2>
+            <div>
+                <a href="/rmm/" class="btn btn-outline-secondary me-2">Back to RMM</a>
+                <a href="{% url 'ticket_create' %}" class="btn btn-primary">+ New Ticket</a>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-3"><div class="card bg-danger text-white p-3"><h3>{{ stats_open }}</h3> Open</div></div>
+            <div class="col-md-3"><div class="card bg-warning text-dark p-3"><h3>{{ stats_progress }}</h3> In Progress</div></div>
+        </div>
+
+        <div class="card bg-dark border-secondary">
+            <div class="card-body">
+                <table class="table table-dark table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Status</th>
+                            <th>Priority</th>
+                            <th>Subject</th>
+                            <th>Device</th>
+                            <th>Created</th>
+                            <th>Assigned</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ticket in tickets %}
+                        <tr>
+                            <td>#{{ ticket.id }}</td>
+                            <td><span class="badge {% if ticket.status == 'Open' %}bg-danger{% else %}bg-success{% endif %}">{{ ticket.status }}</span></td>
+                            <td>{{ ticket.priority }}</td>
+                            <td>{{ ticket.title }}</td>
+                            <td>{{ ticket.agent.hostname|default:"-" }}</td>
+                            <td>{{ ticket.created_at|date:"M d" }}</td>
+                            <td>{{ ticket.assigned_to.username|default:"Unassigned" }}</td>
+                            <td><button class="btn btn-sm btn-info">View</button></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="8">No tickets found.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+{% endblock %}

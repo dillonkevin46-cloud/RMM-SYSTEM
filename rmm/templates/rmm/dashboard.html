@@ -1,0 +1,19 @@
+{% extends 'rmm/base.html' %}
+
+{% block content %}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>🖥️ Device Command Center</h2>
+        <div>
+            <span class="badge bg-success fs-6">{{ online }} Online</span>
+            <span class="badge bg-secondary fs-6 ms-2">{{ offline }} Offline</span>
+        </div>
+    </div>
+
+    <div id="agent-list" 
+         hx-get="{% url 'dashboard' %}" 
+         hx-trigger="every 5s" 
+         hx-swap="innerHTML">
+         
+         {% include 'rmm/partials/agent_list.html' %}
+    </div>
+{% endblock %}

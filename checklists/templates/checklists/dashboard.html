@@ -1,0 +1,58 @@
+{% extends 'rmm/base.html' %}
+
+{% block content %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Forms & Checklists</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>body { background-color: #121212; color: #fff; }</style>
+</head>
+<body class="p-4">
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between mb-4">
+            <h2>📝 Forms & Checklists</h2>
+            <a href="/rmm/" class="btn btn-secondary">Back to RMM</a>
+        </div>
+
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card bg-dark border-secondary p-3">
+                    <h4>Available Actions</h4>
+                    <div class="list-group">
+                        <a href="{% url 'onboarding_form' %}" class="list-group-item list-group-item-action list-group-item-primary">
+                            👤 New User Onboarding
+                        </a>
+                        {% for c in checklists %}
+                        <a href="{% url 'perform_checklist' c.id %}" class="list-group-item list-group-item-action bg-dark text-white border-secondary">
+                            ✅ {{ c.name }}
+                        </a>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-8">
+                <div class="card bg-dark border-secondary p-3">
+                    <h4>History</h4>
+                    <table class="table table-dark">
+                        <thead><tr><th>Form</th><th>User</th><th>Date</th></tr></thead>
+                        <tbody>
+                            {% for sub in history %}
+                            <tr>
+                                <td>{{ sub.checklist.name }}</td>
+                                <td>{{ sub.user.username }}</td>
+                                <td>{{ sub.created_at }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="3">No history yet.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+{% endblock %}

@@ -1,0 +1,23 @@
+{% for agent in agents %}
+<tr>
+    <td>
+        {% if agent.is_online %}
+            <span class="status-dot online"></span> Online
+        {% else %}
+            <span class="status-dot offline"></span> Offline
+        {% endif %}
+    </td>
+    <td>{{ agent.hostname }}</td>
+    <td>{{ agent.private_ip }}</td>
+    <td>{{ agent.last_login_user }}</td>
+    <td>{{ agent.last_seen|date:"H:i:s" }}</td>
+    <td>
+        <a href="{% url 'remote_view' agent.agent_id %}" target="_blank" class="btn btn-sm btn-primary">Connect</a>
+        <button class="btn btn-sm btn-secondary">Details</button>
+    </td>
+</tr>
+{% empty %}
+<tr>
+    <td colspan="6" class="text-center">No agents found. Install the script on a PC!</td>
+</tr>
+{% endfor %}
